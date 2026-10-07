@@ -2,17 +2,24 @@ package main
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/skskuzan/rd-linkforge/internal/base62"
+	"github.com/skskuzan/rd-linkforge/internal/link"
 )
 
-var version = "dev"
-
 func main() {
-	fmt.Printf("linkforge %s\n", version)
-	fmt.Println(base62.Encode(34))
-
-	if v, er := base62.Decode("Y"); er == nil {
-		fmt.Println(v)
+	args := os.Args[1:]
+	if len(args) == 0 {
+		fmt.Println("\nTotal: 0")
+		return
 	}
+	var urlsCount int
+	for i, url := range args {
+		if res, err := link.New(uint64(i+1), url); err == nil {
+			fmt.Printf("%s %s\n", res.Code, res.TargetURL)
+			urlsCount++
+		}
+	}
+
+	fmt.Printf("\nTotal: %d\n", urlsCount)
 }
