@@ -2,7 +2,13 @@
 // It may not import a transport or a storage package.
 package link
 
-import "time"
+import (
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/skskuzan/rd-linkforge/internal/base62"
+)
 
 // Link is a shortened URL. A zero ExpiresAt means it never expires.
 type Link struct {
@@ -12,6 +18,32 @@ type Link struct {
 	OwnerID   string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+}
+
+func New(id uint64, target string) (Link, error) {
+	if len(target) == 0 {
+		return Link{}, errors.New("ErrEmptyTarget: " + target)
+	}
+
+	allowsPrefixes := []string{"http://", "https://"}
+
+	hasError := true
+
+	for i := range allowsPrefixes {
+		if strings.HasPrefix(target, allowsPrefixes[i]) {
+			hasError = false
+		}
+	}
+	if hasError {
+		return Link{}, errors.New("ErrUnsupportedScheme: " + target)
+	}
+	result := Link{ID: int64(id),
+		Code:      base62.EncodeWidth(id, 6),
+		TargetURL: target,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	return result, nil
 }
 
 // ShortenRequest carries everything needed to create a link. An empty Alias
