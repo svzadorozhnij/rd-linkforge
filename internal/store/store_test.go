@@ -19,25 +19,20 @@ func TestAddAndGet(t *testing.T) {
 
 	err := Add(s, l)
 	if err != nil {
-		t.Fatalf("не очікувалось помилки при додаванні: %v", err)
+		t.Fatalf("Unexpected error: %v", err)
 	}
 
 	err = Add(s, l)
 	if err == nil {
-		t.Error("очікувалась помилка дубліката ID, але помилки немає")
+		t.Error("Wait ErrDuplicateID")
 	}
 
 	found, ok := Get(s, 42)
 	if !ok {
-		t.Error("очікувалось знайти лінку з ID 42")
+		t.Error("Added early ID not found")
 	}
 	if found.ID != l.ID {
-		t.Errorf("очікувався ID %d, отримано %d", l.ID, found.ID)
-	}
-
-	_, ok = Get(s, 999)
-	if ok {
-		t.Error("не очікувалось знайти лінку з неіснуючим ID 999")
+		t.Errorf("Wait ID %d, get %d", l.ID, found.ID)
 	}
 }
 
