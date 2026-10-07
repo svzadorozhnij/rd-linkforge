@@ -51,7 +51,7 @@ func TestCount(t *testing.T) {
 	_ = Add(s, link.Link{ID: 5})
 
 	if Count(s) != 3 {
-		t.Errorf("Wait 2 items in store -> has %d", Count(s))
+		t.Errorf("Wait 3 items in store -> has %d", Count(s))
 	}
 }
 
