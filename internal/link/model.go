@@ -10,6 +10,11 @@ import (
 	"github.com/skskuzan/rd-linkforge/internal/base62"
 )
 
+var (
+	ErrEmptyTarget       = errors.New("empty target")
+	ErrUnsupportedScheme = errors.New("unsupported scheme")
+)
+
 // Link is a shortened URL. A zero ExpiresAt means it never expires.
 type Link struct {
 	ID        int64
@@ -22,7 +27,7 @@ type Link struct {
 
 func New(id uint64, target string) (Link, error) {
 	if len(target) == 0 {
-		return Link{}, errors.New("ErrEmptyTarget: " + target)
+		return Link{}, ErrEmptyTarget
 	}
 
 	allowsPrefixes := []string{"http://", "https://"}
@@ -35,7 +40,7 @@ func New(id uint64, target string) (Link, error) {
 		}
 	}
 	if hasError {
-		return Link{}, errors.New("ErrUnsupportedScheme: " + target)
+		return Link{}, ErrUnsupportedScheme
 	}
 	result := Link{ID: int64(id),
 		Code:      base62.EncodeWidth(id, 6),

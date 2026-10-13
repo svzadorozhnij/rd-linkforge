@@ -15,7 +15,7 @@ var (
 )
 
 func Encode(v uint64) string {
-	if v <= 0 {
+	if v == 0 {
 		return "0"
 	}
 

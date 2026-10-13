@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/skskuzan/rd-linkforge/internal/link"
+	"github.com/skskuzan/rd-linkforge/internal/store"
 )
 
 func main() {
@@ -13,13 +14,18 @@ func main() {
 		fmt.Println("\nTotal: 0")
 		return
 	}
-	var urlsCount int
+	var storedLinks = store.New()
 	for i, url := range args {
 		if res, err := link.New(uint64(i+1), url); err == nil {
-			fmt.Printf("%s %s\n", res.Code, res.TargetURL)
-			urlsCount++
+			err = store.Add(storedLinks, res)
+		} else {
+			_, _ = os.Stderr.WriteString(fmt.Sprintf("%s -> %s\n", err, url))
 		}
 	}
 
-	fmt.Printf("\nTotal: %d\n", urlsCount)
+	for _, curLink := range store.All(storedLinks) {
+		fmt.Printf("%s %s\n", curLink.Code, curLink.TargetURL)
+	}
+
+	fmt.Printf("\nTotal: %d\n", store.Count(storedLinks))
 }
