@@ -18,6 +18,18 @@ func TestEncode(t *testing.T) {
 	}
 }
 
+func TestEncodeRecursive(t *testing.T) {
+	tests := map[uint64]string{
+		0: "0", 9: "9", 10: "A", 35: "Z", 36: "a", 61: "z",
+		62: "10", 3843: "zz", 3844: "100", 123456: "W7E",
+	}
+	for in, want := range tests {
+		if got := EncodeRecursive(in); got != want {
+			t.Errorf("EncodeRecursive(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestEncodeWidth(t *testing.T) {
 	if got := EncodeWidth(61, 6); got != "00000z" {
 		t.Errorf("EncodeWidth(61, 6) = %q, want \"00000z\"", got)
