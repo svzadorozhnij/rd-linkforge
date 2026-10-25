@@ -18,7 +18,7 @@ func TestEncode(t *testing.T) {
 	}
 }
 
-func TestEncodeRecursive(t *testing.T) {
+func TestEncodeRecursiveExamples(t *testing.T) {
 	tests := map[uint64]string{
 		0: "0", 9: "9", 10: "A", 35: "Z", 36: "a", 61: "z",
 		62: "10", 3843: "zz", 3844: "100", 123456: "W7E",

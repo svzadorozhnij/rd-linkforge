@@ -4,6 +4,7 @@ package link
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -31,14 +32,12 @@ const (
 
 // Link is a shortened URL. A zero ExpiresAt means it never expires.
 type Link struct {
-	ID             int64
-	Code           string
-	TargetURL      string
-	OwnerID        string
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-	ShortenRequest ShortenRequest
-	Page           Page
+	ID        uint64
+	Code      string
+	Target    string
+	OwnerID   string
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 func New(id uint64, target string) (Link, error) {
@@ -58,9 +57,9 @@ func New(id uint64, target string) (Link, error) {
 	if hasError {
 		return Link{}, ErrUnsupportedScheme
 	}
-	result := Link{ID: int64(id),
+	result := Link{ID: id,
 		Code:      base62.EncodeWidth(id, 6),
-		TargetURL: target,
+		Target:    target,
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -70,7 +69,7 @@ func New(id uint64, target string) (Link, error) {
 // ShortenRequest carries everything needed to create a link. An empty Alias
 // asks for a generated code.
 type ShortenRequest struct {
-	TargetURL string
+	Target    string
 	Alias     string
 	OwnerID   string
 	ExpiresAt time.Time
@@ -84,21 +83,22 @@ type Page struct {
 
 func (p Page) Normalize() Page {
 	if p.Limit <= 0 {
-		return Page{Limit: DefaultPageLimit}
+		p.Limit = DefaultPageLimit
 	} else if p.Limit > MaxPageLimit {
-		return Page{Limit: MaxPageLimit}
+		p.Limit = MaxPageLimit
 	}
-	return Page{Limit: p.Limit}
+	return p
 }
 
 func (p Page) AfterID() (uint64, error) {
 	if p.Cursor == "" {
-		return 0, ErrInvalidCursor
-	} else if v, err := base62.Decode(p.Cursor); err != nil {
-		return 0, ErrInvalidCursor
-	} else {
-		return v, nil
+		return 0, nil
 	}
+	v, err := base62.Decode(p.Cursor)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrInvalidCursor, err)
+	}
+	return v, nil
 }
 
 type AliasError struct {
@@ -107,7 +107,7 @@ type AliasError struct {
 }
 
 func (e *AliasError) Error() string {
-	return e.Err.Error()
+	return fmt.Sprintf("alias %q: %v", e.Alias, e.Err)
 }
 func (e *AliasError) Unwrap() error {
 	return e.Err

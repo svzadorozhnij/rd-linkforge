@@ -32,19 +32,10 @@ func Encode(v uint64) string {
 }
 
 func EncodeRecursive(v uint64) string {
-	if v == 0 {
-		return "0"
+	if v < 62 {
+		return string(alphabet[v])
 	}
-
-	currentValue := alphabet[v%62]
-	var result string
-
-	if v/62 > 0 {
-		result = string(currentValue) + reverse(EncodeRecursive(v/62))
-	} else {
-		result = string(currentValue)
-	}
-	return reverse(result)
+	return EncodeRecursive(v/62) + string(alphabet[v%62])
 }
 
 func reverse(preResult string) string {

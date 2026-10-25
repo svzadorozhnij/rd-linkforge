@@ -2,19 +2,22 @@
 
 A URL shortener with real-time click analytics, built incrementally as the course project for **Golang for developers**.
 
-The design is specified in the project TDD; this repository is the skeleton it describes.
+The design is specified in the project TDD; this repository implements the first two homework assignments on top of the course skeleton.
 
 ## Current state
 
-**Skeleton only.** Every seam in the architecture exists as an interface with a Null Object implementation that satisfies it and does nothing. Nothing is wired together and no behaviour is implemented yet — each milestone replaces one set of `Noop*` types with real ones.
+Homework 2 implements `link.Service`, the `Shortener` backed by an in-memory store. It creates links with generated base62 codes or custom aliases, validates requests, checks expiration when resolving links, lists an owner's links with cursor pagination, and restricts deletion to the owner. The remaining course milestones retain their skeleton implementations.
 
-Each file declares exactly one interface alongside its no-op implementation, so the compile-time contract and its placeholder stay together. Types shared by several interfaces live in the package's `model.go`.
+Run the tests with `go test ./...`. Try the demo with `go run ./cmd/linkforge https://example.com ftp://nope https://go.dev`; invalid addresses are reported on stderr, and valid links receive consecutive IDs.
+
+The skeleton interfaces and their no-op implementations remain in place. Types shared by several interfaces live in the package's `model.go`.
 
 ## Layout
 
 ```
 cmd/      linkforged        service binary — prints its version, nothing more
           linkctl           operator CLI   — prints its version, nothing more
+          linkforge         URL-shortening demo backed by an in-memory store
 
 pkg/                        reusable libraries — a separate Go module
   shortid/  Codec           base62 encode/decode                       M1
@@ -24,6 +27,8 @@ pkg/                        reusable libraries — a separate Go module
 internal/                   application code
   link/     Store           link persistence, declared by its consumer M1 / M7
             Shortener       the domain service behind every transport  M2
+  store/                    in-memory link persistence                 M1 / M2
+  base62/                   base62 encoding and decoding               M1 / M2
   click/    Ingester        non-blocking submission from the hot path  M5
             Store           append-only raw event persistence          M7
             Aggregator      time series and top-N queries              M5

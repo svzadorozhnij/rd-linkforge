@@ -27,7 +27,7 @@ func TestLinkModel(t *testing.T) {
 			t.Fatalf("New(%d, %s) -> Error %v", k, v, err)
 		}
 
-		if newLink.TargetURL != v || base62.EncodeWidth(k, 6) != newLink.Code {
+		if newLink.Target != v || base62.EncodeWidth(k, 6) != newLink.Code {
 			t.Fatalf("New(%d, %s): %v", k, v, newLink)
 		}
 	}
