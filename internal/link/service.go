@@ -117,6 +117,15 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
+// WithFirstID sets the ID handed out first. Values below 1 are ignored.
+func WithFirstID(id uint64) Option {
+	return func(s *Service) {
+		if id >= 1 {
+			s.nextID = id
+		}
+	}
+}
+
 func NewService(store Store, opts ...Option) *Service {
 	s := &Service{store: store, nextID: 1, now: time.Now}
 	for _, opt := range opts {
