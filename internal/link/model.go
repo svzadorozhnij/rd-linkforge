@@ -4,6 +4,7 @@ package link
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,15 +12,29 @@ import (
 )
 
 var (
-	ErrEmptyTarget       = errors.New("empty target")
-	ErrUnsupportedScheme = errors.New("unsupported scheme")
+	ErrEmptyTarget       = errors.New("link: empty target")
+	ErrUnsupportedScheme = errors.New("link: unsupported scheme")
+	ErrNotFound          = errors.New("link: not found")
+	ErrAliasTaken        = errors.New("link: alias already taken")
+	ErrInvalidAlias      = errors.New("link: invalid alias")
+	ErrReservedAlias     = errors.New("link: reserved alias")
+	ErrForbidden         = errors.New("link: forbidden")
+	ErrExpired           = errors.New("link: expired")
+	ErrInvalidExpiry     = errors.New("link: invalid expiry")
+	ErrEmptyOwner        = errors.New("link: owner is required")
+	ErrInvalidCursor     = errors.New("link: invalid cursor")
+)
+
+const (
+	DefaultPageLimit = 20
+	MaxPageLimit     = 100
 )
 
 // Link is a shortened URL. A zero ExpiresAt means it never expires.
 type Link struct {
-	ID        int64
+	ID        uint64
 	Code      string
-	TargetURL string
+	Target    string
 	OwnerID   string
 	CreatedAt time.Time
 	ExpiresAt time.Time
@@ -42,9 +57,9 @@ func New(id uint64, target string) (Link, error) {
 	if hasError {
 		return Link{}, ErrUnsupportedScheme
 	}
-	result := Link{ID: int64(id),
+	result := Link{ID: id,
 		Code:      base62.EncodeWidth(id, 6),
-		TargetURL: target,
+		Target:    target,
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -54,7 +69,7 @@ func New(id uint64, target string) (Link, error) {
 // ShortenRequest carries everything needed to create a link. An empty Alias
 // asks for a generated code.
 type ShortenRequest struct {
-	TargetURL string
+	Target    string
 	Alias     string
 	OwnerID   string
 	ExpiresAt time.Time
@@ -64,4 +79,36 @@ type ShortenRequest struct {
 type Page struct {
 	Cursor string
 	Limit  int
+}
+
+func (p Page) Normalize() Page {
+	if p.Limit <= 0 {
+		p.Limit = DefaultPageLimit
+	} else if p.Limit > MaxPageLimit {
+		p.Limit = MaxPageLimit
+	}
+	return p
+}
+
+func (p Page) AfterID() (uint64, error) {
+	if p.Cursor == "" {
+		return 0, nil
+	}
+	v, err := base62.Decode(p.Cursor)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrInvalidCursor, err)
+	}
+	return v, nil
+}
+
+type AliasError struct {
+	Alias string
+	Err   error
+}
+
+func (e *AliasError) Error() string {
+	return fmt.Sprintf("alias %q: %v", e.Alias, e.Err)
+}
+func (e *AliasError) Unwrap() error {
+	return e.Err
 }

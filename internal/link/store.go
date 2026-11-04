@@ -8,7 +8,7 @@ type Store interface {
 	Create(ctx context.Context, l Link) (Link, error)
 	ByCode(ctx context.Context, code string) (Link, error)
 	ListByOwner(ctx context.Context, ownerID string, page Page) ([]Link, error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, id uint64) error
 }
 
 // NoopStore satisfies Store and persists nothing. Implemented in M1 (memory)
@@ -23,4 +23,4 @@ func (NoopStore) ByCode(context.Context, string) (Link, error) { return Link{}, 
 
 func (NoopStore) ListByOwner(context.Context, string, Page) ([]Link, error) { return nil, nil }
 
-func (NoopStore) Delete(context.Context, int64) error { return nil }
+func (NoopStore) Delete(context.Context, uint64) error { return nil }

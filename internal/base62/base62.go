@@ -3,6 +3,7 @@ package base62
 import (
 	"errors"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -30,14 +31,17 @@ func Encode(v uint64) string {
 	return reverse(preResult.String())
 }
 
-func reverse(preResult string) string {
-	var result string
-
-	for _, v := range preResult {
-		result = string(v) + result
+func EncodeRecursive(v uint64) string {
+	if v < 62 {
+		return string(alphabet[v])
 	}
+	return EncodeRecursive(v/62) + string(alphabet[v%62])
+}
 
-	return result
+func reverse(preResult string) string {
+	split := strings.Split(preResult, "")
+	slices.Reverse(split)
+	return strings.Join(split, "")
 }
 
 func EncodeWidth(v uint64, width int) string {
