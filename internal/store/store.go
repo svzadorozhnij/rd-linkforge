@@ -22,7 +22,10 @@ func New() *Store {
 	return &Store{byID: make(map[uint64]link.Link), byCode: make(map[string]uint64)}
 }
 
-func (s *Store) Create(_ context.Context, l link.Link) (link.Link, error) {
+func (s *Store) Create(ctx context.Context, l link.Link) (link.Link, error) {
+	if err := ctx.Err(); err != nil {
+		return link.Link{}, err
+	}
 	if _, ok := s.byID[l.ID]; ok {
 		return link.Link{}, fmt.Errorf("%w: %d", ErrDuplicateID, l.ID)
 	}
@@ -58,7 +61,10 @@ func (s *Store) Count() int {
 	return len(s.byID)
 }
 
-func (s *Store) ByCode(_ context.Context, code string) (link.Link, error) {
+func (s *Store) ByCode(ctx context.Context, code string) (link.Link, error) {
+	if err := ctx.Err(); err != nil {
+		return link.Link{}, err
+	}
 	id, ok := s.byCode[code]
 	if !ok {
 		return link.Link{}, link.ErrNotFound
@@ -66,7 +72,10 @@ func (s *Store) ByCode(_ context.Context, code string) (link.Link, error) {
 	return s.byID[id], nil
 }
 
-func (s *Store) ListByOwner(_ context.Context, ownerID string, page link.Page) ([]link.Link, error) {
+func (s *Store) ListByOwner(ctx context.Context, ownerID string, page link.Page) ([]link.Link, error) {
+	if err := ctx.Err(); err != nil {
+		return []link.Link{}, err
+	}
 	page = page.Normalize()
 	afterID, err := page.AfterID()
 	if err != nil {
@@ -87,7 +96,10 @@ func (s *Store) ListByOwner(_ context.Context, ownerID string, page link.Page) (
 	return res, nil
 }
 
-func (s *Store) Delete(_ context.Context, id uint64) error {
+func (s *Store) Delete(ctx context.Context, id uint64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	l, ok := s.byID[id]
 	if !ok {
 		return link.ErrNotFound

@@ -2,21 +2,78 @@
 
 A URL shortener with real-time click analytics, built incrementally as the course project for **Golang for developers**.
 
-The design is specified in the project TDD; this repository implements the first two homework assignments on top of the course skeleton.
+The design is specified in the project TDD; this repository implements the first three homework assignments on top of the course skeleton.
 
 ## Current state
 
 Homework 2 implements `link.Service`, the `Shortener` backed by an in-memory store. It creates links with generated base62 codes or custom aliases, validates requests, checks expiration when resolving links, lists an owner's links with cursor pagination, and restricts deletion to the owner. The remaining course milestones retain their skeleton implementations.
 
+Homework 3 adds context cancellation, a configurable first link ID, validated environment configuration, JSON Lines persistence, CSV export, and the `linkctl` operator CLI with structured logging.
+
 Run the tests with `go test ./...`. Try the demo with `go run ./cmd/linkforge https://example.com ftp://nope https://go.dev`; invalid addresses are reported on stderr, and valid links receive consecutive IDs.
 
 The skeleton interfaces and their no-op implementations remain in place. Types shared by several interfaces live in the package's `model.go`.
+
+## Operator CLI
+
+Build the CLI and import a text file, then export the database as CSV:
+
+```bash
+go build -o ./bin/linkctl ./cmd/linkctl
+
+cat > targets.txt <<'EOF'
+# One target per line; blank lines and comments are ignored.
+https://example.com
+https://go.dev
+EOF
+
+./bin/linkctl import -in targets.txt -db links.jsonl
+# imported: 2
+# skipped: 0
+
+./bin/linkctl export -db links.jsonl -out links.csv
+./bin/linkctl export -db links.jsonl  # CSV to stdout
+./bin/linkctl version
+```
+
+The database is a local JSON Lines file; import and export do not connect to PostgreSQL or MongoDB. A missing import database starts empty. Existing links are preserved, and each subsequent import starts at the largest existing ID plus one. Imported links belong to `cli`. Invalid targets are skipped while valid targets are saved. An interrupted import leaves the database file untouched. Export requires an existing database.
+
+Results go to stdout; logs, diagnostics, and usage messages go to stderr. Exit codes are `0` for success, `1` for a runtime failure or an import with skipped targets, and `2` for invalid usage, including an invalid `LF_LOG_LEVEL`.
+
+Set `LF_LOG_LEVEL=debug` to see a log entry for each imported target. The default `info` level includes import start and finish; skipped targets are logged at `warn`. Target URLs are omitted from logs because they may contain credentials or tokens.
+
+## Environment configuration
+
+Configuration uses only these environment variables. Surrounding whitespace is trimmed; unset, empty, or whitespace-only values use the default, or produce a missing-variable error for required values.
+
+| Variable | Default | Validation |
+|---|---|---|
+| `LF_HTTP_ADDR` | `:8080` | `host:port`, port `1–65535` |
+| `LF_ADMIN_ADDR` | `127.0.0.1:6060` | `host:port`, port `1–65535` |
+| `LF_TCP_ADDR` | `:7070` | `host:port`, port `1–65535` |
+| `LF_PG_DSN` | Required | Non-empty; no connection or format check |
+| `LF_MONGO_URI` | Required | Non-empty; no connection or format check |
+| `LF_JWT_SECRET` | Required | At least 32 bytes after trimming |
+| `LF_CACHE_SIZE` | `100000` | Integer greater than zero |
+| `LF_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`, case-insensitive |
+
+Check configuration with development example values:
+
+```bash
+LF_PG_DSN='postgres://localhost/linkforge' \
+LF_MONGO_URI='mongodb://localhost/linkforge' \
+LF_JWT_SECRET='development-only-secret-at-least-32-bytes' \
+./bin/linkctl config
+# config ok
+```
+
+The `config` command reports all validation problems together. On success it logs the configuration with `pg_dsn`, `mongo_uri`, and `jwt_secret` replaced by `[redacted]`. Import, export, and version require only a valid log level; they do not require the database credentials or JWT secret.
 
 ## Layout
 
 ```
 cmd/      linkforged        service binary — prints its version, nothing more
-          linkctl           operator CLI   — prints its version, nothing more
+          linkctl           operator CLI   — import, export, config, version
           linkforge         URL-shortening demo backed by an in-memory store
 
 pkg/                        reusable libraries — a separate Go module
@@ -38,6 +95,7 @@ internal/                   application code
             UserStore       account persistence                        M7
   transport/Server          uniform listener lifecycle                 M6 / M8
   config/   Loader          environment-only configuration             M3
+  linkio/                   target files, JSON Lines, CSV               M3
   observability/Metrics     counters and histograms                    M10
 ```
 
