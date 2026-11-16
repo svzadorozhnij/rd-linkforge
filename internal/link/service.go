@@ -12,6 +12,7 @@ import (
 
 type Service struct {
 	store  Store
+	cache  Cache
 	nextID uint64
 	now    func() time.Time
 }
@@ -68,9 +69,20 @@ func (s *Service) Resolve(ctx context.Context, code string) (Link, error) {
 	if err := ctx.Err(); err != nil {
 		return Link{}, err
 	}
-	l, err := s.store.ByCode(ctx, code)
-	if err != nil {
-		return Link{}, fmt.Errorf("resolve link %q: %w", code, err)
+	var l Link
+	var hit bool
+	if s.cache != nil {
+		l, hit = s.cache.Get(code)
+	}
+	if !hit {
+		var err error
+		l, err = s.store.ByCode(ctx, code)
+		if err != nil {
+			return Link{}, fmt.Errorf("resolve link %q: %w", code, err)
+		}
+		if s.cache != nil {
+			s.cache.Put(code, l)
+		}
 	}
 	if !l.ExpiresAt.IsZero() && !s.now().Before(l.ExpiresAt) {
 		return Link{}, ErrExpired
@@ -104,6 +116,9 @@ func (s *Service) Delete(ctx context.Context, ownerID, code string) error {
 	}
 	if err := s.store.Delete(ctx, l.ID); err != nil {
 		return fmt.Errorf("delete link %q: %w", code, err)
+	}
+	if s.cache != nil {
+		s.cache.Delete(code)
 	}
 	return nil
 }

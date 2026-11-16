@@ -11,7 +11,8 @@ import (
 
 var _ link.Store = (*Store)(nil)
 
-func hw2Link(id uint64, code, owner string) link.Link {
+func hw2Link(t *testing.T, id uint64, code, owner string) link.Link {
+	t.Helper()
 	return link.Link{ID: id, Code: code, Target: "https://example.com", OwnerID: owner}
 }
 
@@ -19,7 +20,7 @@ func TestStoreCreateAndByCode(t *testing.T) {
 	ctx := context.Background()
 	s := New()
 
-	got, err := s.Create(ctx, hw2Link(1, "abc", "u1"))
+	got, err := s.Create(ctx, hw2Link(t, 1, "abc", "u1"))
 	if err != nil || got.ID != 1 || got.Code != "abc" {
 		t.Fatalf("Create = %+v, %v", got, err)
 	}
@@ -29,10 +30,10 @@ func TestStoreCreateAndByCode(t *testing.T) {
 	if _, err := s.ByCode(ctx, "nope"); !errors.Is(err, link.ErrNotFound) {
 		t.Errorf("unknown code err = %v, want link.ErrNotFound", err)
 	}
-	if _, err := s.Create(ctx, hw2Link(1, "other", "u1")); !errors.Is(err, ErrDuplicateID) {
+	if _, err := s.Create(ctx, hw2Link(t, 1, "other", "u1")); !errors.Is(err, ErrDuplicateID) {
 		t.Errorf("duplicate id err = %v, want ErrDuplicateID", err)
 	}
-	if _, err := s.Create(ctx, hw2Link(2, "abc", "u1")); !errors.Is(err, link.ErrAliasTaken) {
+	if _, err := s.Create(ctx, hw2Link(t, 2, "abc", "u1")); !errors.Is(err, link.ErrAliasTaken) {
 		t.Errorf("duplicate code err = %v, want link.ErrAliasTaken", err)
 	}
 	if s.Count() != 1 {
@@ -44,7 +45,7 @@ func TestStoreGetAllCount(t *testing.T) {
 	ctx := context.Background()
 	s := New()
 	for _, id := range []uint64{3, 1, 2} {
-		if _, err := s.Create(ctx, hw2Link(id, string(rune('a'+id)), "u1")); err != nil {
+		if _, err := s.Create(ctx, hw2Link(t, id, string(rune('a'+id)), "u1")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -69,7 +70,9 @@ func TestStoreGetAllCount(t *testing.T) {
 func TestStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	s := New()
-	_, _ = s.Create(ctx, hw2Link(1, "abc", "u1"))
+	if _, err := s.Create(ctx, hw2Link(t, 1, "abc", "u1")); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := s.Delete(ctx, 9); !errors.Is(err, link.ErrNotFound) {
 		t.Errorf("unknown id err = %v, want link.ErrNotFound", err)
@@ -80,7 +83,7 @@ func TestStoreDelete(t *testing.T) {
 	if _, err := s.ByCode(ctx, "abc"); !errors.Is(err, link.ErrNotFound) {
 		t.Errorf("deleted link still found: %v", err)
 	}
-	if _, err := s.Create(ctx, hw2Link(2, "abc", "u1")); err != nil {
+	if _, err := s.Create(ctx, hw2Link(t, 2, "abc", "u1")); err != nil {
 		t.Errorf("a deleted link must free its code: %v", err)
 	}
 }
@@ -93,7 +96,7 @@ func TestStoreListByOwner(t *testing.T) {
 		if id%2 == 0 {
 			owner = "b"
 		}
-		if _, err := s.Create(ctx, hw2Link(id, "code"+string(rune('0'+id)), owner)); err != nil {
+		if _, err := s.Create(ctx, hw2Link(t, id, "code"+string(rune('0'+id)), owner)); err != nil {
 			t.Fatal(err)
 		}
 	}
