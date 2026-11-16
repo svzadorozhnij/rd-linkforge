@@ -3,8 +3,7 @@ package main
 
 import "fmt"
 
-// version is overwritten at build time with -ldflags "-X main.version=...".
-var version = "dev"
+const version = "dev"
 
 func main() {
 	fmt.Printf("linkforged %s\n", version)

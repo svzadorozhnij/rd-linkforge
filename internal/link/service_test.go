@@ -50,7 +50,7 @@ func TestServiceWithFirstID(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := NewService(newHW2Store(), tc.opts...)
+			svc := NewService(newHW2Store(t), tc.opts...)
 			for i, wantCode := range tc.wantCodes {
 				got, err := svc.Shorten(context.Background(), ShortenRequest{
 					Target:  "https://example.com",
