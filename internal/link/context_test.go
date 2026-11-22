@@ -46,7 +46,7 @@ func TestServiceContext(t *testing.T) {
 }
 
 func TestCanceledShortenDoesNotConsumeID(t *testing.T) {
-	st := newHW2Store()
+	st := newHW2Store(t)
 	svc := NewService(st, WithFirstID(42))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

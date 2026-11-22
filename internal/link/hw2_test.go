@@ -17,7 +17,10 @@ type hw2Store struct {
 	failWith error
 }
 
-func newHW2Store() *hw2Store { return &hw2Store{byID: map[uint64]Link{}} }
+func newHW2Store(t *testing.T) *hw2Store {
+	t.Helper()
+	return &hw2Store{byID: map[uint64]Link{}}
+}
 
 func (f *hw2Store) Create(_ context.Context, l Link) (Link, error) {
 	f.creates++
@@ -57,29 +60,34 @@ func (f *hw2Store) Delete(_ context.Context, id uint64) error {
 
 var _ Shortener = (*Service)(nil)
 
-var hw2Epoch = time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+func hw2Epoch(t *testing.T) time.Time {
+	t.Helper()
+	return time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+}
 
-func hw2Service(f *hw2Store) (*Service, *time.Time) {
-	now := hw2Epoch
+func hw2Service(t *testing.T, f *hw2Store) (*Service, *time.Time) {
+	t.Helper()
+	now := hw2Epoch(t)
 	return NewService(f, WithClock(func() time.Time { return now })), &now
 }
 
-func hw2Req(target string) ShortenRequest {
+func hw2Req(t *testing.T, target string) ShortenRequest {
+	t.Helper()
 	return ShortenRequest{Target: target, OwnerID: "u1"}
 }
 
 func TestServiceShortenGenerated(t *testing.T) {
-	svc, _ := hw2Service(newHW2Store())
+	svc, _ := hw2Service(t, newHW2Store(t))
 	ctx := context.Background()
 
-	a, err := svc.Shorten(ctx, hw2Req("https://example.com"))
+	a, err := svc.Shorten(ctx, hw2Req(t, "https://example.com"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.ID != 1 || a.Code != "000001" || a.Target != "https://example.com" || a.OwnerID != "u1" || !a.CreatedAt.Equal(hw2Epoch) {
+	if a.ID != 1 || a.Code != "000001" || a.Target != "https://example.com" || a.OwnerID != "u1" || !a.CreatedAt.Equal(hw2Epoch(t)) {
 		t.Errorf("first link = %+v", a)
 	}
-	b, err := svc.Shorten(ctx, hw2Req("https://go.dev"))
+	b, err := svc.Shorten(ctx, hw2Req(t, "https://go.dev"))
 	if err != nil || b.ID != 2 || b.Code != "000002" {
 		t.Errorf("second link = %+v, %v", b, err)
 	}
@@ -87,7 +95,7 @@ func TestServiceShortenGenerated(t *testing.T) {
 
 func TestServiceShortenValidation(t *testing.T) {
 	ctx := context.Background()
-	soon := hw2Epoch.Add(time.Hour)
+	soon := hw2Epoch(t).Add(time.Hour)
 	tests := []struct {
 		name string
 		req  ShortenRequest
@@ -95,9 +103,9 @@ func TestServiceShortenValidation(t *testing.T) {
 	}{
 		{"no owner", ShortenRequest{Target: "https://a.io"}, ErrEmptyOwner},
 		{"empty target", ShortenRequest{OwnerID: "u1"}, ErrEmptyTarget},
-		{"bad scheme", hw2Req("ftp://a.io"), ErrUnsupportedScheme},
-		{"expiry now", ShortenRequest{Target: "https://a.io", OwnerID: "u1", ExpiresAt: hw2Epoch}, ErrInvalidExpiry},
-		{"expiry past", ShortenRequest{Target: "https://a.io", OwnerID: "u1", ExpiresAt: hw2Epoch.Add(-time.Second)}, ErrInvalidExpiry},
+		{"bad scheme", hw2Req(t, "ftp://a.io"), ErrUnsupportedScheme},
+		{"expiry now", ShortenRequest{Target: "https://a.io", OwnerID: "u1", ExpiresAt: hw2Epoch(t)}, ErrInvalidExpiry},
+		{"expiry past", ShortenRequest{Target: "https://a.io", OwnerID: "u1", ExpiresAt: hw2Epoch(t).Add(-time.Second)}, ErrInvalidExpiry},
 		{"alias short", ShortenRequest{Target: "https://a.io", OwnerID: "u1", Alias: "ab"}, ErrInvalidAlias},
 		{"alias chars", ShortenRequest{Target: "https://a.io", OwnerID: "u1", Alias: "bad alias"}, ErrInvalidAlias},
 		{"alias long", ShortenRequest{Target: "https://a.io", OwnerID: "u1", Alias: strings.Repeat("a", 33)}, ErrInvalidAlias},
@@ -105,8 +113,8 @@ func TestServiceShortenValidation(t *testing.T) {
 		{"alias reserved case", ShortenRequest{Target: "https://a.io", OwnerID: "u1", Alias: "Metrics"}, ErrReservedAlias},
 	}
 	for _, tc := range tests {
-		f := newHW2Store()
-		svc, _ := hw2Service(f)
+		f := newHW2Store(t)
+		svc, _ := hw2Service(t, f)
 		if _, err := svc.Shorten(ctx, tc.req); !errors.Is(err, tc.want) {
 			t.Errorf("%s: err = %v, want %v", tc.name, err, tc.want)
 		}
@@ -121,7 +129,7 @@ func TestServiceShortenValidation(t *testing.T) {
 }
 
 func TestServiceAlias(t *testing.T) {
-	svc, _ := hw2Service(newHW2Store())
+	svc, _ := hw2Service(t, newHW2Store(t))
 	ctx := context.Background()
 	req := ShortenRequest{Target: "https://example.com", OwnerID: "u1", Alias: "my-link_1"}
 
@@ -136,7 +144,7 @@ func TestServiceAlias(t *testing.T) {
 		t.Fatalf("duplicate alias err = %v", err)
 	}
 
-	next, err := svc.Shorten(ctx, hw2Req("https://go.dev"))
+	next, err := svc.Shorten(ctx, hw2Req(t, "https://go.dev"))
 	if err != nil || next.ID != 2 {
 		t.Errorf("link after a taken alias = %+v, %v; want ID 2", next, err)
 	}
@@ -148,7 +156,7 @@ func TestServiceAlias(t *testing.T) {
 }
 
 func TestServiceGeneratedCodeCollision(t *testing.T) {
-	svc, _ := hw2Service(newHW2Store())
+	svc, _ := hw2Service(t, newHW2Store(t))
 	ctx := context.Background()
 	for _, alias := range []string{"000004", "000005", "000006"} {
 		if _, err := svc.Shorten(ctx, ShortenRequest{Target: "https://a.io", OwnerID: "u1", Alias: alias}); err != nil {
@@ -156,23 +164,23 @@ func TestServiceGeneratedCodeCollision(t *testing.T) {
 		}
 	}
 	// IDs 1-3 are used; ID 4 derives "000004", which is taken, then 5 and 6.
-	if _, err := svc.Shorten(ctx, hw2Req("https://example.com")); !errors.Is(err, ErrAliasTaken) {
+	if _, err := svc.Shorten(ctx, hw2Req(t, "https://example.com")); !errors.Is(err, ErrAliasTaken) {
 		t.Fatalf("err = %v, want ErrAliasTaken after three collisions", err)
 	}
 	// Each attempt consumed an ID, so the next free code is derived from 7.
-	l, err := svc.Shorten(ctx, hw2Req("https://example.com"))
+	l, err := svc.Shorten(ctx, hw2Req(t, "https://example.com"))
 	if err != nil || l.ID != 7 || l.Code != "000007" {
 		t.Errorf("link = %+v, %v; want ID 7", l, err)
 	}
 }
 
 func TestServiceCollisionRetrySucceeds(t *testing.T) {
-	svc, _ := hw2Service(newHW2Store())
+	svc, _ := hw2Service(t, newHW2Store(t))
 	ctx := context.Background()
 	if _, err := svc.Shorten(ctx, ShortenRequest{Target: "https://a.io", OwnerID: "u1", Alias: "000002"}); err != nil {
 		t.Fatal(err)
 	}
-	l, err := svc.Shorten(ctx, hw2Req("https://example.com"))
+	l, err := svc.Shorten(ctx, hw2Req(t, "https://example.com"))
 	if err != nil || l.ID != 3 || l.Code != "000003" {
 		t.Errorf("link = %+v, %v; want ID 3 after one collision", l, err)
 	}
@@ -180,27 +188,33 @@ func TestServiceCollisionRetrySucceeds(t *testing.T) {
 
 func TestServiceStoreErrorIsWrapped(t *testing.T) {
 	boom := errors.New("boom")
-	f := newHW2Store()
+	f := newHW2Store(t)
 	f.failWith = boom
-	svc, _ := hw2Service(f)
+	svc, _ := hw2Service(t, f)
 	ctx := context.Background()
 
-	if _, err := svc.Shorten(ctx, hw2Req("https://example.com")); !errors.Is(err, boom) {
+	if _, err := svc.Shorten(ctx, hw2Req(t, "https://example.com")); !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want it to wrap the store error", err)
 	}
 	f.failWith = nil
-	if l, err := svc.Shorten(ctx, hw2Req("https://example.com")); err != nil || l.ID != 1 {
+	if l, err := svc.Shorten(ctx, hw2Req(t, "https://example.com")); err != nil || l.ID != 1 {
 		t.Errorf("link after a store failure = %+v, %v; want ID 1", l, err)
 	}
 }
 
 func TestServiceResolve(t *testing.T) {
-	svc, now := hw2Service(newHW2Store())
+	svc, now := hw2Service(t, newHW2Store(t))
 	ctx := context.Background()
-	expires := hw2Epoch.Add(time.Hour)
+	expires := hw2Epoch(t).Add(time.Hour)
 
-	temp, _ := svc.Shorten(ctx, ShortenRequest{Target: "https://a.io", OwnerID: "u1", ExpiresAt: expires})
-	forever, _ := svc.Shorten(ctx, hw2Req("https://b.io"))
+	temp, err := svc.Shorten(ctx, ShortenRequest{Target: "https://a.io", OwnerID: "u1", ExpiresAt: expires})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forever, err := svc.Shorten(ctx, hw2Req(t, "https://b.io"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := svc.Resolve(ctx, temp.Code)
 	if err != nil || got.Target != "https://a.io" {
@@ -218,16 +232,19 @@ func TestServiceResolve(t *testing.T) {
 	if _, err := svc.Resolve(ctx, temp.Code); !errors.Is(err, ErrExpired) {
 		t.Errorf("at expiry err = %v, want ErrExpired", err)
 	}
-	*now = hw2Epoch.AddDate(10, 0, 0)
+	*now = hw2Epoch(t).AddDate(10, 0, 0)
 	if _, err := svc.Resolve(ctx, forever.Code); err != nil {
 		t.Errorf("link without expiry: %v", err)
 	}
 }
 
 func TestServiceDelete(t *testing.T) {
-	svc, _ := hw2Service(newHW2Store())
+	svc, _ := hw2Service(t, newHW2Store(t))
 	ctx := context.Background()
-	l, _ := svc.Shorten(ctx, hw2Req("https://a.io"))
+	l, err := svc.Shorten(ctx, hw2Req(t, "https://a.io"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := svc.Delete(ctx, "", l.Code); !errors.Is(err, ErrEmptyOwner) {
 		t.Errorf("empty owner err = %v", err)
@@ -250,8 +267,8 @@ func TestServiceDelete(t *testing.T) {
 }
 
 func TestServiceListNormalizesPage(t *testing.T) {
-	f := newHW2Store()
-	svc, _ := hw2Service(f)
+	f := newHW2Store(t)
+	svc, _ := hw2Service(t, f)
 	ctx := context.Background()
 
 	if _, err := svc.List(ctx, "", Page{}); !errors.Is(err, ErrEmptyOwner) {

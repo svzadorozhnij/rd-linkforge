@@ -2,15 +2,17 @@
 
 A URL shortener with real-time click analytics, built incrementally as the course project for **Golang for developers**.
 
-The design is specified in the project TDD; this repository implements the first three homework assignments on top of the course skeleton.
+The design is specified in the project TDD; this repository implements the first four homework assignments on top of the course skeleton.
 
 ## Current state
 
-Homework 2 implements `link.Service`, the `Shortener` backed by an in-memory store. It creates links with generated base62 codes or custom aliases, validates requests, checks expiration when resolving links, lists an owner's links with cursor pagination, and restricts deletion to the owner. The remaining course milestones retain their skeleton implementations.
+Homework 2 implements `link.Service`, the `Shortener` backed by an in-memory store. It creates links with generated base62 codes or custom aliases, validates requests, checks expiration when resolving links, lists an owner's links with cursor pagination, and restricts deletion to the owner.
 
 Homework 3 adds context cancellation, a configurable first link ID, validated environment configuration, JSON Lines persistence, CSV export, and the `linkctl` operator CLI with structured logging.
 
-Run the tests with `go test ./...`. Try the demo with `go run ./cmd/linkforge https://example.com ftp://nope https://go.dev`; invalid addresses are reported on stderr, and valid links receive consecutive IDs.
+Homework 4 adds a concurrency-safe generic LRU, a byte-ordered trie, a bounded top-N heap, and a six-character code generator with an injected random reader. The generator combines 19 random bits with a wrapping 16-bit counter; it remains separate from the Service's sequential ID-derived codes. `link.WithCache` optionally enables lookup caching: successful store lookups populate the cache, hits still undergo expiry checks, and successful deletions invalidate cached entries. Shorten and List do not touch the cache. Later course milestones retain their skeleton implementations.
+
+Run `make test` to test both modules with the race detector. Try the demo with `go run ./cmd/linkforge https://example.com ftp://nope https://go.dev`; invalid addresses are reported on stderr, and valid links receive consecutive IDs.
 
 The skeleton interfaces and their no-op implementations remain in place. Types shared by several interfaces live in the package's `model.go`.
 
@@ -77,13 +79,18 @@ cmd/      linkforged        service binary — prints its version, nothing more
           linkforge         URL-shortening demo backed by an in-memory store
 
 pkg/                        reusable libraries — a separate Go module
-  shortid/  Codec           base62 encode/decode                       M1
-            Generator       collision-resistant code issuing           M4
-  cache/    Cache[K,V]      bounded cache on the redirect hot path     M4
+  shortid/  Codec           base62 codec contract                      M1
+            Generator       code issuing contract                      M4
+            CodeGenerator   19 random bits + 16-bit counter, base62     M4
+  cache/    Cache[K,V]       bounded cache contract                     M4
+            LRU[K,V]        map + doubly linked list                   M4
+  trie/     Trie            byte-ordered alias autocomplete            M4
+  topk/     TopK, Item      bounded heap, best counts first            M4
 
 internal/                   application code
   link/     Store           link persistence, declared by its consumer M1 / M7
             Shortener       the domain service behind every transport  M2
+            Cache           optional Resolve lookup cache contract     M4
   store/                    in-memory link persistence                 M1 / M2
   base62/                   base62 encoding and decoding               M1 / M2
   click/    Ingester        non-blocking submission from the hot path  M5
@@ -100,6 +107,56 @@ internal/                   application code
 ```
 
 The `pkg/` tree is a second module so that reusable libraries stay free of any dependency on application code; `go.work` ties the two together for local development.
+
+## Complexity
+
+Here `n` is the number of stored entries or words, `N` is the heap capacity, `w` is the input word length, `L` is the prefix length, and `W` is the longest stored word length, all measured in bytes. For prefix queries, `k` is the number of returned words, `v` is the number of subtree nodes actually visited, and `B` is the number of output bytes copied (`B <= kW`). Key hashing and comparisons are treated as constant-time; mutex contention and random-reader latency are excluded.
+
+| Operation | Average time | Worst-case time |
+|---|---|---|
+| `LRU.Get` | O(1) | O(n), if map lookups degenerate |
+| `LRU.Put` | O(1) amortized | O(n), due to map growth or degenerate lookups |
+| `LRU.Delete` | O(1) | O(n), if map lookups degenerate |
+| `LRU.Len` | O(1) | O(1) |
+| `LRU.Keys` | O(n) | O(n) |
+| `Trie.Insert`, `Contains`, `Delete` | O(w) | O(w) |
+| `Trie.WithPrefix` | O(L + v + B) | O(L + nW + B) |
+| `TopK.Add` | O(log N) | O(log N) |
+| `TopK.Result` | O(n log n), with n <= N | O(n log n), with n <= N |
+| `CodeGenerator.Next` | O(1) | O(1) |
+
+`LRU.Get` uses a map to find the list element in average O(1) time. The doubly linked list then moves that element to the front by updating a fixed number of pointers, so this extra step is O(1). Together the map and list avoid scanning entries or shifting an array.
+
+Trie nodes have at most 256 byte edges. Prefix traversal visits these edges in byte order and stops immediately after `k` matches when a positive limit is set; it never sorts the results. Its cost includes traversing the matching branches and copying whole output words, so prefix queries are not generally O(L + k). The heap reserves capacity for N items at construction so Add does not need to grow its backing slice; Result copies the retained items before sorting them.
+
+## Benchmarks
+
+Recorded on 2026-11-16 with Go 1.25.6, macOS/arm64, Apple M4 Pro. The trie contains 10,000 distinct aliases; each query requests the first 20 matches for `alias09`. Setup is outside the timed `b.Loop`, and both benchmarks call `b.ReportAllocs()`.
+
+```text
+$ make bench
+cd pkg && go test -run '^$' -bench . -benchmem ./...
+goos: darwin
+goarch: arm64
+pkg: github.com/skskuzan/rd-linkforge/pkg/cache
+cpu: Apple M4 Pro
+BenchmarkLRUGetHit-14    154417390         7.760 ns/op        0 B/op        0 allocs/op
+PASS
+ok      github.com/skskuzan/rd-linkforge/pkg/cache    1.398s
+PASS
+ok      github.com/skskuzan/rd-linkforge/pkg/shortid  0.229s
+PASS
+ok      github.com/skskuzan/rd-linkforge/pkg/topk     0.224s
+goos: darwin
+goarch: arm64
+pkg: github.com/skskuzan/rd-linkforge/pkg/trie
+cpu: Apple M4 Pro
+BenchmarkWithPrefix-14     148870          8027 ns/op     1328 B/op       26 allocs/op
+PASS
+ok      github.com/skskuzan/rd-linkforge/pkg/trie     1.433s
+```
+
+A cache hit allocates no memory; the prefix query allocates the returned strings and result slice. These measurements describe this machine and workload, rather than a speed guarantee. Run `cd pkg && go test -cover ./...` to check the required 85% package coverage, and `make test` to include race detection in both modules.
 
 ## Design rules
 
@@ -131,7 +188,7 @@ Requires Go 1.25+. Linting uses [golangci-lint](https://golangci-lint.run) (`bre
 | M1 | 2–3 | base62 codec, `Link` model, in-memory store |
 | M2 | 4–5 | Methods, interfaces, generics, error values |
 | M3 | 6–7 | Files and `context`, CLI, `slog`, tests |
-| M4 | 8–9 | Own hash table, LRU, trie, top-N heap |
+| M4 | 8–9 | LRU, trie, top-N heap, code generator, Service cache |
 | M5 | 10–11 | Ingestion pipeline, worker pool, synchronisation |
 | M6 | 12–13 | TCP resolver, graceful shutdown, Docker |
 | M7 | 14 | PostgreSQL and MongoDB stores |
