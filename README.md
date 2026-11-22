@@ -16,6 +16,14 @@ Run `make test` to test both modules with the race detector. Try the demo with `
 
 The skeleton interfaces and their no-op implementations remain in place. Types shared by several interfaces live in the package's `model.go`.
 
+## Concurrency
+
+- **Counters** are owned by one goroutine started in `NewCounters`; the count map lives only inside it. `Add`, `Series` and `Top` send it work over a channel, queries get their result back on a reply channel, and every wait also gives up on `ctx.Done()` or `Close`.
+- **The `Pipeline` mutex** (`sync.RWMutex`) protects the `closed` and `started` flags and the closing of the queue channel, so no one ever sends on a closed channel.
+- **`Submit` takes only the read lock**: many redirects may submit at once, the non-blocking `select` keeps the hold short, and `Shutdown` cannot take the write lock to close the queue while any send is in progress.
+- **Only `Shutdown` closes the queue**, under the write lock and exactly once; workers only read from it.
+- **Shutdown order**: set `closed` (from now on `Submit` returns `false`) → close the queue → workers drain it, flush their last batches and exit → a watcher goroutine closes `done` after `WaitGroup.Wait` → `Shutdown` returns. If its `ctx` ends first, it cancels the workers' context so a stuck `Append` returns, and reports `ctx.Err()`.
+
 ## Operator CLI
 
 Build the CLI and import a text file, then export the database as CSV:
